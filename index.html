@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FX Tracker">
+<title>FX Tracker — SGD/USD</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1f2d45;
+    --accent: #00d4aa;
+    --accent2: #3b82f6;
+    --danger: #f43f5e;
+    --warn: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --green: #10b981;
+    --red: #f43f5e;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  .mono { font-family: 'DM Mono', monospace; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; }
+  .main-content { padding-bottom: 80px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card-dark {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 10px 20px; border-radius: 10px; font-family: 'Syne', sans-serif;
+    font-weight: 600; font-size: 14px; cursor: pointer; border: none;
+    transition: all 0.2s; min-height: 44px;
+  }
+  .btn-primary { background: var(--accent); color: #0a0e1a; }
+  .btn-primary:hover { background: #00b896; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; min-height: 32px; border-radius: 8px; }
+  .badge {
+    display: inline-flex; align-items: center; padding: 4px 10px;
+    border-radius: 20px; font-size: 12px; font-weight: 600;
+  }
+  .badge-green { background: rgba(16,185,129,0.15); color: var(--green); }
+  .badge-red { background: rgba(244,63,94,0.15); color: var(--red); }
+  .badge-yellow { background: rgba(245,158,11,0.15); color: var(--warn); }
+  .badge-blue { background: rgba(59,130,246,0.15); color: var(--accent2); }
+  .badge-teal { background: rgba(0,212,170,0.15); color: var(--accent); }
+  .input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px; color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 14px; outline: none;
+    transition: border-color 0.2s; min-height: 44px;
+  }
+  .input:focus { border-color: var(--accent); }
+  .input::placeholder { color: var(--muted); }
+  select.input option { background: var(--surface); }
+  .label { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 6px; display: block; }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 200; display: flex; align-items: flex-end;
+    backdrop-filter: blur(4px); opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal-sheet {
+    background: var(--surface); border-radius: 24px 24px 0 0;
+    padding: 20px; width: 100%; max-height: 90vh; overflow-y: auto;
+    transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
+  }
+  .modal-overlay.open .modal-sheet { transform: translateY(0); }
+  .drag-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 20px; }
+  .fab {
+    position: fixed; bottom: 90px; right: 20px; width: 56px; height: 56px;
+    border-radius: 50%; background: var(--accent); color: #0a0e1a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 700; cursor: pointer; z-index: 99;
+    box-shadow: 0 4px 20px rgba(0,212,170,0.4); border: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .fab:hover { transform: scale(1.05); box-shadow: 0 6px 24px rgba(0,212,170,0.5); }
+  .rate-big { font-size: 48px; font-weight: 800; letter-spacing: -2px; line-height: 1; }
+  .stat-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat-value { font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 500; color: var(--text); }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+  .toggle-group { display: flex; background: var(--surface2); border-radius: 10px; padding: 3px; gap: 2px; }
+  .toggle-btn { flex: 1; padding: 7px; border-radius: 8px; border: none; background: transparent; color: var(--muted); font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; min-height: 36px; }
+  .toggle-btn.active { background: var(--accent); color: #0a0e1a; }
+  .type-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+  .type-btn { flex: 1; padding: 12px; border-radius: 12px; border: 2px solid var(--border); background: transparent; color: var(--muted); font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; transition: all 0.2s; font-size: 14px; }
+  .type-btn.buy.active { border-color: var(--green); background: rgba(16,185,129,0.1); color: var(--green); }
+  .type-btn.sell.active { border-color: var(--red); background: rgba(244,63,94,0.1); color: var(--red); }
+  .row-buy { border-left: 3px solid var(--green); }
+  .row-sell { border-left: 3px solid var(--red); }
+  .signal-bar { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--green), var(--warn), var(--red)); position: relative; margin: 8px 0; }
+  .signal-indicator { position: absolute; top: -3px; width: 12px; height: 12px; border-radius: 50%; background: white; border: 2px solid var(--bg); transform: translateX(-50%); transition: left 0.5s; }
+  .offline-banner { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: var(--warn); padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 12px; display: none; }
+  .backup-banner { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); color: var(--accent2); padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .loading { display: flex; align-items: center; justify-content: center; padding: 40px; }
+  .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .home-screen-banner { background: rgba(0,212,170,0.1); border: 1px solid rgba(0,212,170,0.2); color: var(--accent); padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .verdict-box { border-radius: 12px; padding: 14px; margin-top: 12px; }
+  .verdict-good { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); }
+  .verdict-warn { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); }
+  .verdict-bad { background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.2); }
+  .fd-matured-banner { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); color: var(--accent2); padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 6px; border-bottom: 1px solid rgba(31,45,69,0.5); vertical-align: middle; }
+  .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .section-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .calc-output { background: var(--surface2); border-radius: 10px; padding: 12px; margin-top: 8px; }
+  .calc-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; }
+  .calc-row .key { color: var(--muted); }
+  .calc-row .val { font-family: 'DM Mono', monospace; font-weight: 500; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  @media (max-width: 380px) { .rate-big { font-size: 38px; } }
+</style>
+</head>
+<body>
+
+<!-- Offline Banner -->
+<div id="offlineBanner" class="offline-banner mx-4 mt-2">
+  ⚠️ Offline — showing cached rates. Last updated: <span id="offlineTime">—</span>
+</div>
+
+<!-- Home Screen Banner -->
+<div id="homeScreenBanner" class="home-screen-banner mx-4 mt-2" style="display:none">
+  <span>📱 Add to Home Screen for app experience</span>
+  <button onclick="dismissHomeScreen()" style="background:none;border:none;color:var(--accent);font-size:18px;cursor:pointer;padding:0 4px;">×</button>
+</div>
+
+<!-- Backup Banner -->
+<div id="backupBanner" class="backup-banner mx-4 mt-2" style="display:none">
+  <span>💾 <span id="backupDaysText"></span> days since last backup</span>
+  <button onclick="document.getElementById('backupBanner').style.display='none'" style="background:none;border:none;color:var(--accent2);font-size:18px;cursor:pointer;padding:0 4px;">×</button>
+</div>
+
+<div class="main-content p-4">
+
+  <!-- TAB: DASHBOARD -->
+  <div id="tab-dashboard" class="tab-content active">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div>
+        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.1em;">SGD per 1 USD</div>
+        <div class="rate-big mono" id="liveRate">—</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+          <span id="rateChangeBadge" class="badge">—</span>
+          <span style="font-size:12px;color:var(--muted);" id="rateUpdated">Loading...</span>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="fetchRates(true)">↻ Refresh</button>
+    </div>
+
+    <!-- Historical Context -->
+    <div class="card">
+      <div class="section-title">52-Week Context</div>
+      <div id="contextLoading" class="loading"><div class="spinner"></div></div>
+      <div id="contextContent" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div class="card-dark" style="text-align:center">
+            <div class="stat-label">52W Low</div>
+            <div class="stat-value" id="low52w">—</div>
+          </div>
+          <div class="card-dark" style="text-align:center">
+            <div class="stat-label">Average</div>
+            <div class="stat-value" id="avg52w">—</div>
+          </div>
+          <div class="card-dark" style="text-align:center">
+            <div class="stat-label">52W High</div>
+            <div class="stat-value" id="high52w">—</div>
+          </div>
+        </div>
+        <div class="signal-bar">
+          <div class="signal-indicator" id="signalIndicator" style="left:50%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:10px;">
+          <span>Cheap USD</span><span>Expensive USD</span>
+        </div>
+        <div id="signalBadgeContainer" style="text-align:center;margin-bottom:8px;"></div>
+        <div style="text-align:center;font-size:13px;color:var(--muted);">Percentile: <span class="mono" id="percentile">—</span></div>
+      </div>
+    </div>
+
+    <!-- Calculator 2 -->
+    <div class="card">
+      <div class="section-title">💡 Should I Buy USD Now?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div>
+          <label class="label">SGD to Exchange</label>
+          <input type="number" class="input" id="calc2Sgd" placeholder="e.g. 5000" oninput="calcShouldBuy()">
+        </div>
+        <div>
+          <label class="label">FD Rate % p.a.</label>
+          <input type="number" class="input" id="calc2FdRate" placeholder="3.5" oninput="calcShouldBuy()">
+        </div>
+        <div>
+          <label class="label">Holding (months)</label>
+          <input type="number" class="input" id="calc2Months" placeholder="12" oninput="calcShouldBuy()">
+        </div>
+        <div>
+          <label class="label">Risk Buffer %</label>
+          <input type="number" class="input" id="calc2Buffer" placeholder="2" oninput="calcShouldBuy()">
+        </div>
+      </div>
+      <div id="calc2Output" style="display:none">
+        <div class="calc-output">
+          <div class="calc-row"><span class="key">USD you'd get</span><span class="val" id="c2Usd">—</span></div>
+          <div class="calc-row"><span class="key">FD interest (USD)</span><span class="val" id="c2FdUsd">—</span></div>
+          <div class="calc-row"><span class="key">FD interest (SGD ~)</span><span class="val" id="c2FdSgd">—</span></div>
+          <div class="calc-row"><span class="key">Effective SGD cost</span><span class="val" id="c2EffSgd">—</span></div>
+          <div class="calc-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px;">
+            <span class="key">Break-even sell rate</span><span class="val" style="color:var(--accent)" id="c2Breakeven">—</span>
+          </div>
+          <div class="calc-row"><span class="key">SGD safe down to</span><span class="val" id="c2SafeRate">—</span></div>
+        </div>
+        <div id="calc2Verdict" class="verdict-box"></div>
+      </div>
+      <div id="calc2Prompt" style="text-align:center;color:var(--muted);font-size:13px;padding:12px 0;">Enter amounts above to see analysis</div>
+    </div>
+  </div>
+
+  <!-- TAB: CHART -->
+  <div id="tab-chart" class="tab-content">
+    <div class="card" style="padding:12px;">
+      <div class="toggle-group" id="chartRangeToggle">
+        <button class="toggle-btn" onclick="setChartRange('1M')">1M</button>
+        <button class="toggle-btn" onclick="setChartRange('3M')">3M</button>
+        <button class="toggle-btn" onclick="setChartRange('6M')">6M</button>
+        <button class="toggle-btn active" onclick="setChartRange('1Y')">1Y</button>
+        <button class="toggle-btn" onclick="setChartRange('3Y')">3Y</button>
+        <button class="toggle-btn" onclick="setChartRange('5Y')">5Y</button>
+      </div>
+    </div>
+    <div class="card" style="padding:12px;">
+      <div id="chartLoading" class="loading"><div class="spinner"></div></div>
+      <canvas id="rateChart" style="display:none;max-height:280px;"></canvas>
+    </div>
+    <div class="card">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;">
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:16px;height:2px;background:var(--accent2);display:inline-block;"></span> SGD/USD Rate</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;background:var(--green);border-radius:50%;display:inline-block;"></span> BUY (SGD→USD)</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;background:var(--red);border-radius:50%;display:inline-block;"></span> SELL (USD→SGD)</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:16px;height:1px;background:var(--warn);display:inline-block;border-top:2px dashed var(--warn);"></span> Blended Rate</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:16px;height:1px;background:#a78bfa;display:inline-block;border-top:2px dashed #a78bfa;"></span> Break-even</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: EXCHANGES -->
+  <div id="tab-exchanges" class="tab-content">
+    <!-- Summary -->
+    <div class="card">
+      <div class="section-title">Portfolio Summary</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="card-dark">
+          <div class="stat-label">Total SGD Spent</div>
+          <div class="stat-value mono" id="sumSgdSpent">S$ 0.00</div>
+        </div>
+        <div class="card-dark">
+          <div class="stat-label">Total USD Acquired</div>
+          <div class="stat-value mono" id="sumUsdAcquired">$ 0.00</div>
+        </div>
+        <div class="card-dark">
+          <div class="stat-label">SGD Received Back</div>
+          <div class="stat-value mono" id="sumSgdBack">S$ 0.00</div>
+        </div>
+        <div class="card-dark">
+          <div class="stat-label">Remaining USD</div>
+          <div class="stat-value mono" id="sumRemainingUsd">$ 0.00</div>
+        </div>
+        <div class="card-dark" style="grid-column:span 2">
+          <div class="stat-label">Blended Avg Buy Rate</div>
+          <div class="stat-value mono" id="sumBlendedRate">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calculator 1 -->
+    <div class="card">
+      <div class="section-title">📊 Break-Even Sell Rate</div>
+      <div id="calc1Content">
+        <div class="calc-output">
+          <div class="calc-row"><span class="key">Remaining USD</span><span class="val mono" id="c1RemUsd">—</span></div>
+          <div class="calc-row"><span class="key">SGD to recover</span><span class="val mono" id="c1SgdRecover">—</span></div>
+          <div class="calc-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px;">
+            <span class="key">Break-even rate</span><span class="val" style="color:var(--accent)" id="c1Breakeven">—</span></div>
+          <div class="calc-row"><span class="key">Current rate</span><span class="val mono" id="c1Current">—</span></div>
+          <div class="calc-row"><span class="key">Status</span><span id="c1Status">—</span></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;font-style:italic;">FD interest excluded — treated as separate income</div>
+      </div>
+    </div>
+
+    <!-- Transaction List -->
+    <div class="card">
+      <div class="section-title">Transaction History</div>
+      <div id="exchangeList">
+        <div class="empty-state">
+          <div class="empty-icon">💱</div>
+          <div style="font-weight:600;margin-bottom:4px;">No transactions yet</div>
+          <div style="font-size:13px;">Tap + to log your first exchange</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: FD LOG -->
+  <div id="tab-fd" class="tab-content">
+    <!-- Summary -->
+    <div class="card">
+      <div class="section-title">FD Summary</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="card-dark">
+          <div class="stat-label">Active FDs</div>
+          <div class="stat-value mono" id="fdActiveCnt">0</div>
+        </div>
+        <div class="card-dark">
+          <div class="stat-label">Total Principal</div>
+          <div class="stat-value mono" id="fdTotalPrincipal">$ 0.00</div>
+        </div>
+        <div class="card-dark">
+          <div class="stat-label">Interest Earned</div>
+          <div class="stat-value mono" style="color:var(--green)" id="fdInterestEarned">$ 0.00</div>
+        </div>
+        <div class="card-dark">
+          <div class="stat-label">Projected at Maturity</div>
+          <div class="stat-value mono" id="fdProjected">$ 0.00</div>
+        </div>
+        <div class="card-dark" style="grid-column:span 2">
+          <div class="stat-label">Lifetime Interest Earned</div>
+          <div class="stat-value mono" style="color:var(--accent)" id="fdLifetime">$ 0.00</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Matured FD Alerts -->
+    <div id="fdMaturedAlerts"></div>
+
+    <!-- FD List -->
+    <div class="card">
+      <div class="section-title">Fixed Deposits</div>
+      <div id="fdList">
+        <div class="empty-state">
+          <div class="empty-icon">🏦</div>
+          <div style="font-weight:600;margin-bottom:4px;">No FDs logged yet</div>
+          <div style="font-size:13px;">Tap + to add your first FD</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: SETTINGS -->
+  <div id="tab-settings" class="tab-content">
+    <div class="card">
+      <div class="section-title">Default FD Rate</div>
+      <label class="label">Interest Rate % per annum</label>
+      <input type="number" class="input" id="settingFdRate" placeholder="3.5" step="0.1">
+      <button class="btn btn-primary" style="margin-top:10px;width:100%" onclick="saveFdRateSetting()">Save Rate</button>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Platforms</div>
+      <div id="platformList" style="margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" class="input" id="newPlatform" placeholder="Add platform..." style="flex:1">
+        <button class="btn btn-secondary" onclick="addPlatform()">Add</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Export & Backup</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button class="btn btn-primary" style="width:100%" onclick="exportExcel()">📊 Export to Excel (.xlsx)</button>
+        <button class="btn btn-secondary" style="width:100%" onclick="exportJSON()">💾 Backup Data (.json)</button>
+        <div style="position:relative;">
+          <button class="btn btn-secondary" style="width:100%" onclick="document.getElementById('restoreInput').click()">📂 Restore from Backup</button>
+          <input type="file" id="restoreInput" accept=".json" style="display:none" onchange="restoreData(event)">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Danger Zone</div>
+      <button class="btn btn-danger" style="width:100%" onclick="clearAllData()">🗑 Clear All Data</button>
+    </div>
+
+    <div style="text-align:center;color:var(--muted);font-size:12px;padding:16px 0;">
+      FX Tracker v1.0 · Data stored on this device only<br>
+      <span id="lastBackupInfo" style="margin-top:4px;display:block;"></span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Bottom Navigation -->
+<div class="bottom-nav" style="background:var(--surface);border-top:1px solid var(--border);">
+  <div style="display:flex;padding:8px 0 12px;">
+    <button class="tab-nav-btn active" onclick="switchTab('dashboard')" style="flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px;min-height:44px;">
+      <span style="font-size:20px;">📊</span>
+      <span style="font-size:10px;font-weight:700;font-family:'Syne',sans-serif;" id="nav-dashboard">Dashboard</span>
+    </button>
+    <button class="tab-nav-btn" onclick="switchTab('chart')" style="flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px;min-height:44px;">
+      <span style="font-size:20px;">📈</span>
+      <span style="font-size:10px;font-weight:700;font-family:'Syne',sans-serif;" id="nav-chart">Chart</span>
+    </button>
+    <button class="tab-nav-btn" onclick="switchTab('exchanges')" style="flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px;min-height:44px;">
+      <span style="font-size:20px;">💱</span>
+      <span style="font-size:10px;font-weight:700;font-family:'Syne',sans-serif;" id="nav-exchanges">Exchanges</span>
+    </button>
+    <button class="tab-nav-btn" onclick="switchTab('fd')" style="flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px;min-height:44px;">
+      <span style="font-size:20px;">🏦</span>
+      <span style="font-size:10px;font-weight:700;font-family:'Syne',sans-serif;" id="nav-fd">FD Log</span>
+    </button>
+    <button class="tab-nav-btn" onclick="switchTab('settings')" style="flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px;min-height:44px;">
+      <span style="font-size:20px;">⚙️</span>
+      <span style="font-size:10px;font-weight:700;font-family:'Syne',sans-serif;" id="nav-settings">Settings</span>
+    </button>
+  </div>
+</div>
+
+<!-- FAB -->
+<button class="fab" id="fabBtn" onclick="openAddModal()">+</button>
+
+<!-- Exchange Modal -->
+<div class="modal-overlay" id="exchangeModal">
+  <div class="modal-sheet">
+    <div class="drag-handle"></div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:16px;" id="exchangeModalTitle">Log Exchange</div>
+    <input type="hidden" id="editExchangeId">
+    <div class="type-toggle">
+      <button class="type-btn buy active" id="typeBuyBtn" onclick="setType('BUY')">▲ BUY<br><span style="font-size:11px;font-weight:400;">SGD → USD</span></button>
+      <button class="type-btn sell" id="typeSellBtn" onclick="setType('SELL')">▼ SELL<br><span style="font-size:11px;font-weight:400;">USD → SGD</span></button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div>
+        <label class="label">Date</label>
+        <input type="date" class="input" id="exDate">
+      </div>
+      <div>
+        <label class="label">Platform</label>
+        <select class="input" id="exPlatform"></select>
+      </div>
+      <div>
+        <label class="label">SGD Amount</label>
+        <input type="number" class="input" id="exSgd" placeholder="0.00" oninput="calcImpliedRate()">
+      </div>
+      <div>
+        <label class="label">USD Amount</label>
+        <input type="number" class="input" id="exUsd" placeholder="0.00" oninput="calcImpliedRate()">
+      </div>
+    </div>
+    <div class="card-dark" style="margin-bottom:10px;text-align:center;">
+      <div class="stat-label">Implied Rate (SGD per USD)</div>
+      <div class="stat-value mono" style="font-size:20px;" id="impliedRate">—</div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <label class="label">Notes (optional)</label>
+      <input type="text" class="input" id="exNotes" placeholder="e.g. For Tiger FD tranche 1">
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeExchangeModal()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveExchange()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- FD Modal -->
+<div class="modal-overlay" id="fdModal">
+  <div class="modal-sheet">
+    <div class="drag-handle"></div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:16px;" id="fdModalTitle">Add Fixed Deposit</div>
+    <input type="hidden" id="editFdId">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div>
+        <label class="label">Principal (USD)</label>
+        <input type="number" class="input" id="fdPrincipal" placeholder="0.00">
+      </div>
+      <div>
+        <label class="label">Interest Rate % p.a.</label>
+        <input type="number" class="input" id="fdRate" placeholder="3.5" step="0.1">
+      </div>
+      <div>
+        <label class="label">Start Date</label>
+        <input type="date" class="input" id="fdStart">
+      </div>
+      <div>
+        <label class="label">Duration (months)</label>
+        <input type="number" class="input" id="fdDuration" placeholder="6" oninput="calcFdMaturity()">
+      </div>
+    </div>
+    <div class="card-dark" style="margin-bottom:10px;text-align:center;">
+      <div class="stat-label">Maturity Date</div>
+      <div class="stat-value mono" id="fdMaturityDisplay">—</div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <label class="label">Notes (optional)</label>
+      <input type="text" class="input" id="fdNotes" placeholder="e.g. Tiger Brokers tranche 1">
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeFdModal()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveFd()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- FD Maturity Modal -->
+<div class="modal-overlay" id="fdMaturityModal">
+  <div class="modal-sheet">
+    <div class="drag-handle"></div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px;">FD Matured 🎉</div>
+    <div style="color:var(--muted);font-size:14px;margin-bottom:16px;" id="fdMaturityDetails"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn btn-primary" style="width:100%" onclick="renewFd()">🔄 Renew / Rollover</button>
+      <button class="btn btn-secondary" style="width:100%" onclick="closeFd()">✅ Close FD</button>
+      <button class="btn btn-secondary" style="width:100%;color:var(--muted)" onclick="closeFdMaturityModal()">Remind me later</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== STORAGE =====================
+const KEYS = { settings:'fx_settings', exchanges:'fx_exchanges', fds:'fx_fds', rateCache:'fx_rate_cache' };
+
+function load(key) { try { return JSON.parse(localStorage.getItem(KEYS[key])) || null; } catch { return null; } }
+function save(key, data) { localStorage.setItem(KEYS[key], JSON.stringify(data)); }
+
+function getSettings() {
+  return load('settings') || { defaultFDRate: 3.5, platforms: ["Tiger","MooMoo","Mum's Tiger","Mum's MooMoo"], lastBackupDate: null };
+}
+function getExchanges() { return load('exchanges') || []; }
+function getFDs() { return load('fds') || []; }
+function getRateCache() { return load('rateCache') || {}; }
+
+// ===================== UUID =====================
+function uuid() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r=Math.random()*16|0; return (c==='x'?r:r&0x3|0x8).toString(16); }); }
+
+// ===================== FORMAT =====================
+function fmtSGD(n) { return 'S$ ' + parseFloat(n||0).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtUSD(n) { return '$ ' + parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtRate(n) { return parseFloat(n||0).toFixed(4); }
+function fmtDate(d) { if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-SG',{day:'2-digit',month:'short',year:'numeric'}); }
+function today() { return new Date().toISOString().split('T')[0]; }
+function addMonths(dateStr, months) {
+  const d = new Date(dateStr+'T00:00:00');
+  d.setMonth(d.getMonth()+parseInt(months));
+  return d.toISOString().split('T')[0];
+}
+function daysBetween(a, b) {
+  const d1=new Date(a+'T00:00:00'), d2=new Date(b+'T00:00:00');
+  return Math.max(0, Math.floor((d2-d1)/(1000*60*60*24)));
+}
+
+// ===================== RATE FETCHING =====================
+let currentRate = null;
+let historical1Y = {};
+let historical5Y = {};
+
+async function fetchRates(force=false) {
+  const cache = getRateCache();
+  const now = Date.now();
+  const oneHour = 60*60*1000;
+  const oneDay = 24*oneHour;
+
+  // Check if online
+  let online = navigator.onLine;
+
+  if (!online) {
+    document.getElementById('offlineBanner').style.display = 'block';
+    if (cache.lastUpdated) document.getElementById('offlineTime').textContent = new Date(cache.lastUpdated).toLocaleString();
+    if (cache.currentRate) applyLiveRate(cache.currentRate, cache.yesterdayRate);
+    if (cache.historical1Y) { historical1Y = cache.historical1Y; applyHistorical(); }
+    if (cache.historical5Y) historical5Y = cache.historical5Y;
+    return;
+  } else {
+    document.getElementById('offlineBanner').style.display = 'none';
+  }
+
+  // Fetch live rate
+  if (force || !cache.currentRate || (now - new Date(cache.lastUpdated||0).getTime()) > oneHour) {
+    try {
+      const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=SGD');
+      const d = await r.json();
+      currentRate = d.rates.SGD;
+
+      // Fetch yesterday for change
+      const yDate = new Date(); yDate.setDate(yDate.getDate()-1);
+      const yStr = yDate.toISOString().split('T')[0];
+      let yRate = cache.yesterdayRate;
+      try {
+        const yr = await fetch(`https://api.frankfurter.app/${yStr}?from=USD&to=SGD`);
+        const yd = await yr.json();
+        yRate = yd.rates?.SGD || yRate;
+      } catch {}
+
+      cache.currentRate = currentRate;
+      cache.yesterdayRate = yRate;
+      cache.lastUpdated = new Date().toISOString();
+      save('rateCache', cache);
+      applyLiveRate(currentRate, yRate);
+    } catch(e) {
+      if (cache.currentRate) { currentRate = cache.currentRate; applyLiveRate(cache.currentRate, cache.yesterdayRate); }
+    }
+  } else {
+    currentRate = cache.currentRate;
+    applyLiveRate(cache.currentRate, cache.yesterdayRate);
+  }
+
+  // Fetch 1Y historical
+  if (force || !cache.historical1Y || (now - new Date(cache.hist1YFetched||0).getTime()) > oneDay) {
+    try {
+      const from1Y = new Date(); from1Y.setFullYear(from1Y.getFullYear()-1);
+      const r = await fetch(`https://api.frankfurter.app/${from1Y.toISOString().split('T')[0]}..?from=USD&to=SGD`);
+      const d = await r.json();
+      historical1Y = {};
+      for (const [date, rates] of Object.entries(d.rates)) historical1Y[date] = rates.SGD;
+      cache.historical1Y = historical1Y;
+      cache.hist1YFetched = new Date().toISOString();
+      save('rateCache', cache);
+      applyHistorical();
+    } catch(e) {
+      if (cache.historical1Y) { historical1Y = cache.historical1Y; applyHistorical(); }
+    }
+  } else {
+    historical1Y = cache.historical1Y;
+    applyHistorical();
+  }
+
+  // Fetch 5Y historical (background)
+  if (force || !cache.historical5Y || (now - new Date(cache.hist5YFetched||0).getTime()) > oneDay*7) {
+    try {
+      const from5Y = new Date(); from5Y.setFullYear(from5Y.getFullYear()-5);
+      const r = await fetch(`https://api.frankfurter.app/${from5Y.toISOString().split('T')[0]}..?from=USD&to=SGD`);
+      const d = await r.json();
+      historical5Y = {};
+      for (const [date, rates] of Object.entries(d.rates)) historical5Y[date] = rates.SGD;
+      cache.historical5Y = historical5Y;
+      cache.hist5YFetched = new Date().toISOString();
+      save('rateCache', cache);
+    } catch {}
+  } else {
+    if (cache.historical5Y) historical5Y = cache.historical5Y;
+  }
+}
+
+function applyLiveRate(rate, yRate) {
+  currentRate = rate;
+  document.getElementById('liveRate').textContent = fmtRate(rate);
+  document.getElementById('rateUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  if (yRate) {
+    const chg = rate - yRate;
+    const pct = (chg/yRate*100).toFixed(2);
+    const badge = document.getElementById('rateChangeBadge');
+    badge.textContent = (chg>=0?'+':'')+chg.toFixed(4)+' ('+pct+'%)';
+    badge.className = 'badge ' + (chg>=0?'badge-red':'badge-green');
+  }
+  updateCalc1();
+  updateCalc2Auto();
+}
+
+function applyHistorical() {
+  const vals = Object.values(historical1Y);
+  if (!vals.length) return;
+  const low = Math.min(...vals), high = Math.max(...vals), avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+  document.getElementById('low52w').textContent = fmtRate(low);
+  document.getElementById('high52w').textContent = fmtRate(high);
+  document.getElementById('avg52w').textContent = fmtRate(avg);
+  document.getElementById('contextLoading').style.display = 'none';
+  document.getElementById('contextContent').style.display = 'block';
+
+  const pct = currentRate ? Math.round((currentRate-low)/(high-low)*100) : 50;
+  document.getElementById('percentile').textContent = pct + 'th percentile';
+  document.getElementById('signalIndicator').style.left = pct + '%';
+
+  const sc = document.getElementById('signalBadgeContainer');
+  if (pct <= 25) sc.innerHTML = '<span class="badge badge-green" style="font-size:14px;">🟢 Good time to buy USD — rate near historical low</span>';
+  else if (pct <= 75) sc.innerHTML = '<span class="badge badge-yellow" style="font-size:14px;">🟡 Average range — neutral signal</span>';
+  else sc.innerHTML = '<span class="badge badge-red" style="font-size:14px;">🔴 Expensive USD — consider waiting</span>';
+
+  if (currentChartRange) renderChart(currentChartRange);
+}
+
+// ===================== TAB NAVIGATION =====================
+let currentTab = 'dashboard';
+const tabs = ['dashboard','chart','exchanges','fd','settings'];
+const fabTabs = { dashboard: false, chart: false, exchanges: true, fd: true, settings: false };
+
+function switchTab(tab) {
+  tabs.forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+    const navEl = document.getElementById('nav-'+t);
+    if (navEl) navEl.style.color = t===tab ? 'var(--accent)' : 'var(--muted)';
+    const btn = document.querySelector(`button[onclick="switchTab('${t}')"]`);
+    if (btn) btn.querySelector('span:first-child').style.opacity = t===tab ? '1' : '0.5';
+  });
+  currentTab = tab;
+  document.getElementById('fabBtn').style.display = fabTabs[tab] ? 'flex' : 'none';
+  if (tab==='chart') renderChart(currentChartRange||'1Y');
+  if (tab==='exchanges') { renderExchanges(); updateCalc1(); }
+  if (tab==='fd') renderFDs();
+  if (tab==='settings') renderSettings();
+}
+
+function openAddModal() {
+  if (currentTab==='exchanges') openExchangeModal();
+  else if (currentTab==='fd') openFdModal();
+}
+
+// ===================== EXCHANGE MODAL =====================
+let currentExType = 'BUY';
+
+function openExchangeModal(id=null) {
+  const modal = document.getElementById('exchangeModal');
+  document.getElementById('editExchangeId').value = id||'';
+  document.getElementById('exchangeModalTitle').textContent = id ? 'Edit Exchange' : 'Log Exchange';
+  document.getElementById('exDate').value = today();
+  document.getElementById('impliedRate').textContent = '—';
+  document.getElementById('exSgd').value = '';
+  document.getElementById('exUsd').value = '';
+  document.getElementById('exNotes').value = '';
+  currentExType = 'BUY';
+  setType('BUY');
+
+  // Populate platforms
+  const sel = document.getElementById('exPlatform');
+  sel.innerHTML = '';
+  getSettings().platforms.forEach(p => sel.innerHTML += `<option>${p}</option>`);
+
+  if (id) {
+    const ex = getExchanges().find(e=>e.id===id);
+    if (ex) {
+      document.getElementById('exDate').value = ex.date;
+      document.getElementById('exSgd').value = ex.sgdAmount;
+      document.getElementById('exUsd').value = ex.usdAmount;
+      document.getElementById('exNotes').value = ex.notes||'';
+      sel.value = ex.platform;
+      setType(ex.type);
+      calcImpliedRate();
+    }
+  }
+  modal.classList.add('open');
+}
+
+function closeExchangeModal() { document.getElementById('exchangeModal').classList.remove('open'); }
+
+function setType(type) {
+  currentExType = type;
+  document.getElementById('typeBuyBtn').classList.toggle('active', type==='BUY');
+  document.getElementById('typeSellBtn').classList.toggle('active', type==='SELL');
+}
+
+function calcImpliedRate() {
+  const sgd = parseFloat(document.getElementById('exSgd').value);
+  const usd = parseFloat(document.getElementById('exUsd').value);
+  if (sgd && usd && usd > 0) {
+    document.getElementById('impliedRate').textContent = fmtRate(sgd/usd);
+  } else {
+    document.getElementById('impliedRate').textContent = '—';
+  }
+}
+
+function saveExchange() {
+  const sgd = parseFloat(document.getElementById('exSgd').value);
+  const usd = parseFloat(document.getElementById('exUsd').value);
+  const date = document.getElementById('exDate').value;
+  const platform = document.getElementById('exPlatform').value;
+  if (!sgd || !usd || !date || !platform) { alert('Please fill in all required fields.'); return; }
+
+  const exchanges = getExchanges();
+  const editId = document.getElementById('editExchangeId').value;
+  const entry = { id: editId||uuid(), date, type: currentExType, sgdAmount: sgd, usdAmount: usd, rate: sgd/usd, platform, notes: document.getElementById('exNotes').value };
+
+  if (editId) { const i = exchanges.findIndex(e=>e.id===editId); if(i>=0) exchanges[i]=entry; }
+  else exchanges.push(entry);
+
+  save('exchanges', exchanges);
+  closeExchangeModal();
+  renderExchanges();
+  updateCalc1();
+}
+
+function deleteExchange(id) {
+  if (!confirm('Delete this transaction?')) return;
+  save('exchanges', getExchanges().filter(e=>e.id!==id));
+  renderExchanges();
+  updateCalc1();
+}
+
+// ===================== RENDER EXCHANGES =====================
+function renderExchanges() {
+  const exchanges = getExchanges().sort((a,b)=>b.date.localeCompare(a.date));
+  const container = document.getElementById('exchangeList');
+
+  if (!exchanges.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">💱</div><div style="font-weight:600;margin-bottom:4px;">No transactions yet</div><div style="font-size:13px;">Tap + to log your first exchange</div></div>`;
+    return;
+  }
+
+  // Summary calcs
+  const buys = exchanges.filter(e=>e.type==='BUY');
+  const sells = exchanges.filter(e=>e.type==='SELL');
+  const totalSgdSpent = buys.reduce((s,e)=>s+e.sgdAmount,0);
+  const totalUsdAcq = buys.reduce((s,e)=>s+e.usdAmount,0);
+  const totalSgdBack = sells.reduce((s,e)=>s+e.sgdAmount,0);
+  const totalUsdSold = sells.reduce((s,e)=>s+e.usdAmount,0);
+  const remUsd = totalUsdAcq - totalUsdSold;
+  const blended = totalUsdAcq > 0 ? totalSgdSpent/totalUsdAcq : 0;
+
+  document.getElementById('sumSgdSpent').textContent = fmtSGD(totalSgdSpent);
+  document.getElementById('sumUsdAcquired').textContent = fmtUSD(totalUsdAcq);
+  document.getElementById('sumSgdBack').textContent = fmtSGD(totalSgdBack);
+  document.getElementById('sumRemainingUsd').textContent = fmtUSD(remUsd);
+  document.getElementById('sumBlendedRate').textContent = blended > 0 ? fmtRate(blended) : '—';
+
+  container.innerHTML = exchanges.map(e => `
+    <div class="card-dark row-${e.type.toLowerCase()}" style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <span class="badge ${e.type==='BUY'?'badge-green':'badge-red'}" style="margin-bottom:4px;">${e.type==='BUY'?'▲ BUY':'▼ SELL'}</span>
+          <span class="badge badge-blue" style="margin-left:4px;margin-bottom:4px;">${e.platform}</span>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" onclick="openExchangeModal('${e.id}')">✏️</button>
+          <button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="deleteExchange('${e.id}')">🗑</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;">
+        <div><div class="stat-label">SGD</div><div class="mono" style="font-size:14px;">${fmtSGD(e.sgdAmount)}</div></div>
+        <div><div class="stat-label">USD</div><div class="mono" style="font-size:14px;">${fmtUSD(e.usdAmount)}</div></div>
+        <div><div class="stat-label">Rate</div><div class="mono" style="font-size:14px;">${fmtRate(e.rate)}</div></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px;">${fmtDate(e.date)}${e.notes?' · '+e.notes:''}</div>
+    </div>
+  `).join('');
+}
+
+// ===================== CALC 1 — Break-even sell =====================
+function updateCalc1() {
+  const exchanges = getExchanges();
+  const buys = exchanges.filter(e=>e.type==='BUY');
+  const sells = exchanges.filter(e=>e.type==='SELL');
+  const totalSgdSpent = buys.reduce((s,e)=>s+e.sgdAmount,0);
+  const totalUsdAcq = buys.reduce((s,e)=>s+e.usdAmount,0);
+  const totalSgdBack = sells.reduce((s,e)=>s+e.sgdAmount,0);
+  const totalUsdSold = sells.reduce((s,e)=>s+e.usdAmount,0);
+  const remUsd = totalUsdAcq - totalUsdSold;
+  const sgdToRecover = totalSgdSpent - totalSgdBack;
+  const breakeven = remUsd > 0 ? sgdToRecover/remUsd : 0;
+
+  document.getElementById('c1RemUsd').textContent = fmtUSD(remUsd);
+  document.getElementById('c1SgdRecover').textContent = fmtSGD(sgdToRecover);
+  document.getElementById('c1Breakeven').textContent = breakeven > 0 ? fmtRate(breakeven) : '—';
+  document.getElementById('c1Current').textContent = currentRate ? fmtRate(currentRate) : '—';
+
+  if (breakeven > 0 && currentRate) {
+    const diff = ((currentRate - breakeven)/breakeven*100).toFixed(2);
+    const safe = currentRate >= breakeven;
+    document.getElementById('c1Status').innerHTML = safe
+      ? `<span class="badge badge-green">✅ Safe (+${diff}% above break-even)</span>`
+      : `<span class="badge badge-red">🔴 Underwater (${diff}% below break-even)</span>`;
+  } else {
+    document.getElementById('c1Status').innerHTML = '<span style="color:var(--muted)">—</span>';
+  }
+}
+
+// ===================== CALC 2 — Should I buy =====================
+function updateCalc2Auto() {
+  const s = getSettings();
+  if (!document.getElementById('calc2FdRate').value) document.getElementById('calc2FdRate').value = s.defaultFDRate;
+  if (!document.getElementById('calc2Months').value) document.getElementById('calc2Months').value = '12';
+  if (!document.getElementById('calc2Buffer').value) document.getElementById('calc2Buffer').value = '2';
+  calcShouldBuy();
+}
+
+function calcShouldBuy() {
+  const sgd = parseFloat(document.getElementById('calc2Sgd').value);
+  const fdRate = parseFloat(document.getElementById('calc2FdRate').value);
+  const months = parseFloat(document.getElementById('calc2Months').value);
+  const buffer = parseFloat(document.getElementById('calc2Buffer').value)||0;
+  const rate = currentRate;
+
+  if (!sgd || !fdRate || !months || !rate) {
+    document.getElementById('calc2Output').style.display = 'none';
+    document.getElementById('calc2Prompt').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('calc2Output').style.display = 'block';
+  document.getElementById('calc2Prompt').style.display = 'none';
+
+  const usd = sgd / rate;
+  const fdInterestUSD = usd * (fdRate/100) * (months/12);
+  const fdInterestSGD = fdInterestUSD * rate;
+  const effectiveSGD = sgd - fdInterestSGD;
+  const breakevenSell = effectiveSGD / usd;
+  const safeRate = breakevenSell * (1 - buffer/100);
+
+  document.getElementById('c2Usd').textContent = fmtUSD(usd);
+  document.getElementById('c2FdUsd').textContent = fmtUSD(fdInterestUSD);
+  document.getElementById('c2FdSgd').textContent = '~' + fmtSGD(fdInterestSGD);
+  document.getElementById('c2EffSgd').textContent = fmtSGD(effectiveSGD);
+  document.getElementById('c2Breakeven').textContent = fmtRate(breakevenSell);
+  document.getElementById('c2SafeRate').textContent = fmtRate(safeRate);
+
+  // Verdict
+  const vals = Object.values(historical1Y);
+  let verdictHtml = '';
+  if (vals.length > 0) {
+    const low = Math.min(...vals), high = Math.max(...vals);
+    const pct = (rate-low)/(high-low)*100;
+    if (pct <= 25 && safeRate < rate) {
+      verdictHtml = `<div class="verdict-box verdict-good"><div style="font-weight:700;color:var(--green);">✅ Looks Worthwhile</div><div style="font-size:13px;color:var(--text);margin-top:4px;">Rate is in the bottom ${Math.round(pct)}th percentile historically. SGD can weaken to ${fmtRate(safeRate)} before you lose money.</div></div>`;
+    } else if (pct <= 60 && safeRate < rate) {
+      verdictHtml = `<div class="verdict-box verdict-warn"><div style="font-weight:700;color:var(--warn);">⚠️ Marginal</div><div style="font-size:13px;color:var(--text);margin-top:4px;">Rate is in the ${Math.round(pct)}th percentile. FD interest provides some buffer but currency risk is moderate.</div></div>`;
+    } else {
+      verdictHtml = `<div class="verdict-box verdict-bad"><div style="font-weight:700;color:var(--red);">❌ Not Recommended</div><div style="font-size:13px;color:var(--text);margin-top:4px;">Rate is in the ${Math.round(pct)}th percentile — expensive USD. Consider waiting for a better entry.</div></div>`;
+    }
+  }
+  document.getElementById('calc2Verdict').outerHTML.replace;
+  document.getElementById('calc2Verdict').className = '';
+  document.getElementById('calc2Verdict').innerHTML = verdictHtml;
+}
+
+// ===================== CHART =====================
+let rateChartInstance = null;
+let currentChartRange = '1Y';
+
+function setChartRange(range) {
+  currentChartRange = range;
+  document.querySelectorAll('#chartRangeToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.textContent===range));
+  renderChart(range);
+}
+
+function renderChart(range) {
+  const canvas = document.getElementById('rateChart');
+  const loading = document.getElementById('chartLoading');
+
+  // Determine data source and filter
+  let sourceData = {};
+  const now = new Date();
+  let fromDate = new Date();
+
+  if (range==='1M') fromDate.setMonth(fromDate.getMonth()-1);
+  else if (range==='3M') fromDate.setMonth(fromDate.getMonth()-3);
+  else if (range==='6M') fromDate.setMonth(fromDate.getMonth()-6);
+  else if (range==='1Y') fromDate.setFullYear(fromDate.getFullYear()-1);
+  else if (range==='3Y') { fromDate.setFullYear(fromDate.getFullYear()-3); sourceData = {...historical5Y,...historical1Y}; }
+  else if (range==='5Y') { fromDate.setFullYear(fromDate.getFullYear()-5); sourceData = {...historical5Y,...historical1Y}; }
+
+  if (range==='1M'||range==='3M'||range==='6M'||range==='1Y') sourceData = historical1Y;
+
+  if (!Object.keys(sourceData).length) { loading.style.display='flex'; canvas.style.display='none'; return; }
+
+  const fromStr = fromDate.toISOString().split('T')[0];
+  const filtered = Object.entries(sourceData).filter(([d])=>d>=fromStr).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  if (!filtered.length) { loading.style.display='flex'; canvas.style.display='none'; return; }
+
+  loading.style.display='none';
+  canvas.style.display='block';
+
+  const labels = filtered.map(([d])=>d);
+  const rates = filtered.map(([,v])=>v);
+
+  // Exchange overlays
+  const exchanges = getExchanges().filter(e=>e.date>=fromStr);
+  const buys = exchanges.filter(e=>e.type==='BUY');
+  const sells = exchanges.filter(e=>e.type==='SELL');
+
+  // Blended rate line
+  const allBuys = getExchanges().filter(e=>e.type==='BUY');
+  const blended = allBuys.length ? allBuys.reduce((s,e)=>s+e.sgdAmount,0)/allBuys.reduce((s,e)=>s+e.usdAmount,0) : null;
+
+  // Break-even
+  const allExchanges = getExchanges();
+  const totalSgdSpent = allBuys.reduce((s,e)=>s+e.sgdAmount,0);
+  const totalUsdAcq = allBuys.reduce((s,e)=>s+e.usdAmount,0);
+  const totalSgdBack = allExchanges.filter(e=>e.type==='SELL').reduce((s,e)=>s+e.sgdAmount,0);
+  const totalUsdSold = allExchanges.filter(e=>e.type==='SELL').reduce((s,e)=>s+e.usdAmount,0);
+  const remUsd = totalUsdAcq - totalUsdSold;
+  const sgdToRecover = totalSgdSpent - totalSgdBack;
+  const breakeven = remUsd > 0 ? sgdToRecover/remUsd : null;
+
+  // Build scatter points
+  function makeScatterPoints(txns) {
+    return txns.map(tx => {
+      const idx = labels.findIndex(l=>l>=tx.date);
+      if (idx<0) return null;
+      return { x: tx.date, y: tx.rate, meta: tx };
+    }).filter(Boolean);
+  }
+
+  const datasets = [
+    {
+      label: 'SGD/USD Rate',
+      data: rates,
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59,130,246,0.05)',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: true,
+      tension: 0.3,
+      type: 'line',
+    }
+  ];
+
+  if (blended) datasets.push({ label:'Blended Buy Rate', data: labels.map(()=>blended), borderColor:'#f59e0b', borderDash:[5,5], borderWidth:1.5, pointRadius:0, fill:false, type:'line' });
+  if (breakeven) datasets.push({ label:'Break-even Rate', data: labels.map(()=>breakeven), borderColor:'#a78bfa', borderDash:[5,5], borderWidth:1.5, pointRadius:0, fill:false, type:'line' });
+
+  if (buys.length) datasets.push({
+    label:'BUY', type:'scatter',
+    data: buys.map(tx=>({x:tx.date,y:tx.rate,meta:tx})).filter(p=>p.x>=fromStr),
+    backgroundColor:'#10b981', pointRadius:6, pointHoverRadius:8,
+  });
+  if (sells.length) datasets.push({
+    label:'SELL', type:'scatter',
+    data: sells.map(tx=>({x:tx.date,y:tx.rate,meta:tx})).filter(p=>p.x>=fromStr),
+    backgroundColor:'#f43f5e', pointRadius:6, pointHoverRadius:8,
+  });
+
+  if (rateChartInstance) rateChartInstance.destroy();
+
+  rateChartInstance = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a2235',
+          borderColor: '#1f2d45',
+          borderWidth: 1,
+          titleColor: '#64748b',
+          bodyColor: '#e2e8f0',
+          callbacks: {
+            label: ctx => {
+              if (ctx.dataset.type==='scatter' && ctx.raw.meta) {
+                const m = ctx.raw.meta;
+                return `${m.type} ${fmtUSD(m.usdAmount)} @ ${fmtRate(m.rate)} (${m.platform})`;
+              }
+              return `${ctx.dataset.label}: ${fmtRate(ctx.raw)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks:{ color:'#64748b', maxTicksLimit:6, font:{size:11} }, grid:{ color:'rgba(31,45,69,0.5)' } },
+        y: { ticks:{ color:'#64748b', font:{size:11}, callback:v=>fmtRate(v) }, grid:{ color:'rgba(31,45,69,0.5)' } }
+      }
+    }
+  });
+}
+
+// ===================== FD MODAL =====================
+function openFdModal(id=null) {
+  const modal = document.getElementById('fdModal');
+  document.getElementById('editFdId').value = id||'';
+  document.getElementById('fdModalTitle').textContent = id ? 'Edit FD' : 'Add Fixed Deposit';
+  document.getElementById('fdPrincipal').value = '';
+  document.getElementById('fdRate').value = getSettings().defaultFDRate;
+  document.getElementById('fdStart').value = today();
+  document.getElementById('fdDuration').value = '';
+  document.getElementById('fdNotes').value = '';
+  document.getElementById('fdMaturityDisplay').textContent = '—';
+
+  if (id) {
+    const fd = getFDs().find(f=>f.id===id);
+    if (fd) {
+      document.getElementById('fdPrincipal').value = fd.principalUSD;
+      document.getElementById('fdRate').value = fd.interestRatePa;
+      document.getElementById('fdStart').value = fd.startDate;
+      document.getElementById('fdDuration').value = fd.durationMonths;
+      document.getElementById('fdNotes').value = fd.notes||'';
+      calcFdMaturity();
+    }
+  }
+  modal.classList.add('open');
+}
+
+function closeFdModal() { document.getElementById('fdModal').classList.remove('open'); }
+
+function calcFdMaturity() {
+  const start = document.getElementById('fdStart').value;
+  const dur = parseInt(document.getElementById('fdDuration').value);
+  if (start && dur) {
+    document.getElementById('fdMaturityDisplay').textContent = fmtDate(addMonths(start, dur));
+  }
+}
+
+function saveFd() {
+  const principal = parseFloat(document.getElementById('fdPrincipal').value);
+  const rate = parseFloat(document.getElementById('fdRate').value);
+  const start = document.getElementById('fdStart').value;
+  const dur = parseInt(document.getElementById('fdDuration').value);
+  if (!principal||!rate||!start||!dur) { alert('Please fill in all required fields.'); return; }
+
+  const fds = getFDs();
+  const editId = document.getElementById('editFdId').value;
+  const entry = { id:editId||uuid(), principalUSD:principal, startDate:start, durationMonths:dur, interestRatePa:rate, status:'ACTIVE', rolledFromId:null, notes:document.getElementById('fdNotes').value };
+
+  if (editId) { const i=fds.findIndex(f=>f.id===editId); if(i>=0) fds[i]={...fds[i],...entry,id:editId}; }
+  else fds.push(entry);
+
+  save('fds', fds);
+  closeFdModal();
+  renderFDs();
+}
+
+function deleteFd(id) {
+  if (!confirm('Delete this FD?')) return;
+  save('fds', getFDs().filter(f=>f.id!==id));
+  renderFDs();
+}
+
+// ===================== RENDER FDs =====================
+function fdInterestEarned(fd) {
+  const days = daysBetween(fd.startDate, fd.status==='ACTIVE' ? today() : addMonths(fd.startDate, fd.durationMonths));
+  return fd.principalUSD * (fd.interestRatePa/100) * (days/365);
+}
+
+function fdProjectedInterest(fd) {
+  const totalDays = fd.durationMonths * 30.44;
+  return fd.principalUSD * (fd.interestRatePa/100) * (totalDays/365);
+}
+
+let pendingMaturityFdId = null;
+
+function renderFDs() {
+  const fds = getFDs().sort((a,b)=>b.startDate.localeCompare(a.startDate));
+  const container = document.getElementById('fdList');
+  const alerts = document.getElementById('fdMaturedAlerts');
+
+  const activeFds = fds.filter(f=>f.status==='ACTIVE');
+  const totalPrincipal = activeFds.reduce((s,f)=>s+f.principalUSD,0);
+  const totalEarned = activeFds.reduce((s,f)=>s+fdInterestEarned(f),0);
+  const totalProjected = activeFds.reduce((s,f)=>s+fdProjectedInterest(f),0);
+  const lifetimeInterest = fds.reduce((s,f)=>s+fdInterestEarned(f),0);
+
+  document.getElementById('fdActiveCnt').textContent = activeFds.length;
+  document.getElementById('fdTotalPrincipal').textContent = fmtUSD(totalPrincipal);
+  document.getElementById('fdInterestEarned').textContent = fmtUSD(totalEarned);
+  document.getElementById('fdProjected').textContent = fmtUSD(totalProjected);
+  document.getElementById('fdLifetime').textContent = fmtUSD(lifetimeInterest);
+
+  // Check for matured FDs
+  alerts.innerHTML = '';
+  fds.filter(f=>f.status==='ACTIVE' && addMonths(f.startDate,f.durationMonths)<=today()).forEach(f=>{
+    alerts.innerHTML += `<div class="fd-matured-banner">🔵 FD matured: $${f.principalUSD.toFixed(2)} USD (started ${fmtDate(f.startDate)}) <button class="btn btn-secondary btn-sm" style="margin-left:8px" onclick="showFdMaturityModal('${f.id}')">Action</button></div>`;
+  });
+
+  if (!fds.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🏦</div><div style="font-weight:600;margin-bottom:4px;">No FDs logged yet</div><div style="font-size:13px;">Tap + to add your first FD</div></div>`;
+    return;
+  }
+
+  container.innerHTML = fds.map(fd => {
+    const earned = fdInterestEarned(fd);
+    const projected = fdProjectedInterest(fd);
+    const maturity = addMonths(fd.startDate, fd.durationMonths);
+    const statusBadge = fd.status==='ACTIVE' ? '<span class="badge badge-green">🟢 Active</span>' : fd.status==='ROLLED' ? '<span class="badge badge-blue">🔄 Rolled</span>' : '<span class="badge badge-blue">🔵 Matured</span>';
+    return `
+      <div class="card-dark" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>${statusBadge}</div>
+          <div style="display:flex;gap:6px;">
+            ${fd.status==='ACTIVE'?`<button class="btn btn-secondary btn-sm" onclick="openFdModal('${fd.id}')">✏️</button>`:''}
+            <button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="deleteFd('${fd.id}')">🗑</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
+          <div><div class="stat-label">Principal</div><div class="mono" style="font-size:14px;">${fmtUSD(fd.principalUSD)}</div></div>
+          <div><div class="stat-label">Rate</div><div class="mono" style="font-size:14px;">${fd.interestRatePa}% p.a.</div></div>
+          <div><div class="stat-label">Start → Maturity</div><div style="font-size:12px;">${fmtDate(fd.startDate)} → ${fmtDate(maturity)}</div></div>
+          <div><div class="stat-label">Duration</div><div style="font-size:12px;">${fd.durationMonths} months</div></div>
+          <div><div class="stat-label">Interest Earned</div><div class="mono" style="font-size:14px;color:var(--green);">${fmtUSD(earned)}</div></div>
+          <div><div class="stat-label">Projected Total</div><div class="mono" style="font-size:14px;color:var(--accent);">${fmtUSD(projected)}</div></div>
+        </div>
+        ${fd.notes?`<div style="font-size:12px;color:var(--muted);margin-top:6px;">${fd.notes}</div>`:''}
+      </div>
+    `;
+  }).join('');
+}
+
+function showFdMaturityModal(id) {
+  pendingMaturityFdId = id;
+  const fd = getFDs().find(f=>f.id===id);
+  if (!fd) return;
+  const earned = fdInterestEarned(fd);
+  document.getElementById('fdMaturityDetails').innerHTML = `Principal: <strong>${fmtUSD(fd.principalUSD)}</strong> · Interest earned: <strong style="color:var(--green)">${fmtUSD(earned)}</strong><br>Total: <strong>${fmtUSD(fd.principalUSD+earned)}</strong>`;
+  document.getElementById('fdMaturityModal').classList.add('open');
+}
+
+function closeFdMaturityModal() { document.getElementById('fdMaturityModal').classList.remove('open'); pendingMaturityFdId=null; }
+
+function renewFd() {
+  const fds = getFDs();
+  const fd = fds.find(f=>f.id===pendingMaturityFdId);
+  if (!fd) return;
+  const earned = fdInterestEarned(fd);
+  const i = fds.findIndex(f=>f.id===fd.id);
+  fds[i].status = 'ROLLED';
+
+  const newFd = { id:uuid(), principalUSD:fd.principalUSD+earned, startDate:addMonths(fd.startDate,fd.durationMonths), durationMonths:fd.durationMonths, interestRatePa:fd.interestRatePa, status:'ACTIVE', rolledFromId:fd.id, notes:fd.notes };
+  fds.push(newFd);
+  save('fds', fds);
+  closeFdMaturityModal();
+  renderFDs();
+}
+
+function closeFd() {
+  const fds = getFDs();
+  const i = fds.findIndex(f=>f.id===pendingMaturityFdId);
+  if (i>=0) fds[i].status='MATURED';
+  save('fds', fds);
+  closeFdMaturityModal();
+  renderFDs();
+}
+
+// ===================== SETTINGS =====================
+function renderSettings() {
+  const s = getSettings();
+  document.getElementById('settingFdRate').value = s.defaultFDRate;
+  renderPlatforms();
+  const lastBk = s.lastBackupDate;
+  document.getElementById('lastBackupInfo').textContent = lastBk ? `Last backup: ${fmtDate(lastBk)}` : 'No backup made yet';
+}
+
+function saveFdRateSetting() {
+  const rate = parseFloat(document.getElementById('settingFdRate').value);
+  if (!rate) { alert('Please enter a valid rate.'); return; }
+  const s = getSettings(); s.defaultFDRate = rate; save('settings', s);
+  alert('Default FD rate saved!');
+}
+
+function renderPlatforms() {
+  const s = getSettings();
+  document.getElementById('platformList').innerHTML = s.platforms.map(p=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+      <span>${p}</span>
+      <button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="deletePlatform('${p}')">Remove</button>
+    </div>
+  `).join('');
+}
+
+function addPlatform() {
+  const val = document.getElementById('newPlatform').value.trim();
+  if (!val) return;
+  const s = getSettings();
+  if (s.platforms.includes(val)) { alert('Platform already exists.'); return; }
+  s.platforms.push(val); save('settings', s);
+  document.getElementById('newPlatform').value = '';
+  renderPlatforms();
+}
+
+function deletePlatform(name) {
+  const exchanges = getExchanges();
+  if (exchanges.some(e=>e.platform===name)) {
+    if (!confirm(`"${name}" is used in existing transactions. Remove anyway?`)) return;
+  }
+  const s = getSettings();
+  s.platforms = s.platforms.filter(p=>p!==name);
+  save('settings', s);
+  renderPlatforms();
+}
+
+// ===================== EXPORT =====================
+function exportExcel() {
+  const exchanges = getExchanges().sort((a,b)=>b.date.localeCompare(a.date));
+  const fds = getFDs().sort((a,b)=>b.startDate.localeCompare(a.startDate));
+
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Exchanges
+  const exRows = [['Date','Type','SGD Amount','USD Amount','Rate','Platform','Notes']];
+  exchanges.forEach(e=>exRows.push([e.date,e.type,e.sgdAmount,e.usdAmount,parseFloat(fmtRate(e.rate)),e.platform,e.notes||'']));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exRows), 'Exchange Log');
+
+  // Sheet 2: FDs
+  const fdRows = [['Start Date','Principal (USD)','Rate % p.a.','Duration (months)','Maturity Date','Status','Interest Earned (USD)','Projected Total (USD)','Notes']];
+  fds.forEach(f=>fdRows.push([f.startDate,f.principalUSD,f.interestRatePa,f.durationMonths,addMonths(f.startDate,f.durationMonths),f.status,parseFloat(fdInterestEarned(f).toFixed(2)),parseFloat(fdProjectedInterest(f).toFixed(2)),f.notes||'']));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fdRows), 'FD Log');
+
+  // Sheet 3: Summary
+  const buys = exchanges.filter(e=>e.type==='BUY');
+  const sells = exchanges.filter(e=>e.type==='SELL');
+  const tSgdSpent = buys.reduce((s,e)=>s+e.sgdAmount,0);
+  const tUsdAcq = buys.reduce((s,e)=>s+e.usdAmount,0);
+  const tSgdBack = sells.reduce((s,e)=>s+e.sgdAmount,0);
+  const tUsdSold = sells.reduce((s,e)=>s+e.usdAmount,0);
+  const remUsd = tUsdAcq - tUsdSold;
+  const blended = tUsdAcq>0 ? tSgdSpent/tUsdAcq : 0;
+  const sgdToRecover = tSgdSpent - tSgdBack;
+  const be = remUsd>0 ? sgdToRecover/remUsd : 0;
+  const lifetimeInterest = fds.reduce((s,f)=>s+fdInterestEarned(f),0);
+  const sumRows = [
+    ['Summary','Value'],
+    ['Export Date', today()],
+    ['Current SGD/USD Rate', currentRate||'—'],
+    ['Total SGD Spent on BUYs', tSgdSpent.toFixed(2)],
+    ['Total USD Acquired', tUsdAcq.toFixed(2)],
+    ['Total SGD Received from SELLs', tSgdBack.toFixed(2)],
+    ['Net SGD Out-of-Pocket', (tSgdSpent-tSgdBack).toFixed(2)],
+    ['Remaining USD Balance', remUsd.toFixed(2)],
+    ['Blended Average Buy Rate', blended.toFixed(4)],
+    ['Break-even Sell Rate', be.toFixed(4)],
+    ['Total FD Interest Earned (USD)', lifetimeInterest.toFixed(2)],
+    ['Total FD Interest Earned (SGD ~)', currentRate ? (lifetimeInterest*currentRate).toFixed(2) : '—'],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sumRows), 'Summary');
+
+  const filename = `fx-tracker-export-${today()}.xlsx`;
+  XLSX.writeFile(wb, filename);
+
+  // Update last backup date
+  const s = getSettings(); s.lastBackupDate = today(); save('settings', s);
+  document.getElementById('backupBanner').style.display = 'none';
+}
+
+function exportJSON() {
+  const data = {
+    exportedAt: new Date().toISOString(),
+    settings: getSettings(),
+    exchanges: getExchanges(),
+    fds: getFDs(),
+    rateCache: getRateCache()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `fx-tracker-backup-${today()}.json`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+
+  const s = getSettings(); s.lastBackupDate = today(); save('settings', s);
+  document.getElementById('backupBanner').style.display = 'none';
+  document.getElementById('lastBackupInfo').textContent = `Last backup: ${fmtDate(today())}`;
+}
+
+function restoreData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.exchanges || !data.fds) { alert('Invalid backup file.'); return; }
+      if (!confirm('This will replace ALL current data with the backup. Are you sure?')) return;
+      if (!confirm('Final confirmation: replace all data?')) return;
+      if (data.settings) save('settings', data.settings);
+      if (data.exchanges) save('exchanges', data.exchanges);
+      if (data.fds) save('fds', data.fds);
+      if (data.rateCache) save('rateCache', data.rateCache);
+      alert('Data restored successfully!');
+      location.reload();
+    } catch { alert('Could not read backup file. Make sure it\'s a valid .json backup.'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function clearAllData() {
+  if (!confirm('This will permanently delete ALL your data. Are you sure?')) return;
+  if (!confirm('This cannot be undone. Delete everything?')) return;
+  Object.values(KEYS).forEach(k=>localStorage.removeItem(k));
+  location.reload();
+}
+
+// ===================== BANNERS =====================
+function checkBackupBanner() {
+  const s = getSettings();
+  if (!s.lastBackupDate) {
+    document.getElementById('backupBanner').style.display = 'flex';
+    document.getElementById('backupDaysText').textContent = 'No backup yet';
+    return;
+  }
+  const days = daysBetween(s.lastBackupDate, today());
+  if (days > 30) {
+    document.getElementById('backupBanner').style.display = 'flex';
+    document.getElementById('backupDaysText').textContent = days;
+  }
+}
+
+function dismissHomeScreen() { localStorage.setItem('fx_homescreen_dismissed','1'); document.getElementById('homeScreenBanner').style.display='none'; }
+
+function checkHomeScreenBanner() {
+  if (localStorage.getItem('fx_homescreen_dismissed')) return;
+  const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+  if (!isStandalone) document.getElementById('homeScreenBanner').style.display = 'flex';
+}
+
+// ===================== INIT =====================
+document.addEventListener('DOMContentLoaded', async () => {
+  // Set nav colors
+  switchTab('dashboard');
+
+  // Init calc2 fields from settings
+  updateCalc2Auto();
+
+  // Fetch rates
+  await fetchRates();
+
+  // Render exchanges summary
+  renderExchanges();
+  updateCalc1();
+
+  // Check banners
+  checkBackupBanner();
+  checkHomeScreenBanner();
+
+  // Close modals on overlay click
+  ['exchangeModal','fdModal','fdMaturityModal'].forEach(id=>{
+    document.getElementById(id).addEventListener('click', e=>{
+      if (e.target.id===id) document.getElementById(id).classList.remove('open');
+    });
+  });
+
+  // FD start date triggers maturity recalc
+  document.getElementById('fdStart').addEventListener('change', calcFdMaturity);
+});
+</script>
+</body>
+</html>
